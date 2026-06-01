@@ -20,6 +20,7 @@ import com.accpro.teller.data.ApiRepository
 import com.accpro.teller.data.ApiResult
 import com.accpro.teller.data.BalanceItem
 import com.accpro.teller.data.LocalStore
+import com.accpro.teller.ui.components.SafeCircularProgressIndicator
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,7 +77,7 @@ fun BalancesScreen(onBack: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
+                    SafeCircularProgressIndicator()
                     Spacer(Modifier.height(8.dp))
                     Text("Loading balances...")
                 }

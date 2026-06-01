@@ -16,6 +16,7 @@ import com.accpro.teller.data.AccountItem
 import com.accpro.teller.data.ApiRepository
 import com.accpro.teller.data.ApiResult
 import com.accpro.teller.data.LocalStore
+import com.accpro.teller.ui.components.SafeCircularProgressIndicator
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -327,7 +328,7 @@ fun VoucherFormScreen(
                     .fillMaxWidth()
                     .height(50.dp)
             ) {
-                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                if (loading) SafeCircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
                 else Text("Save $typeLabel Voucher", fontWeight = FontWeight.Bold)
             }
         }

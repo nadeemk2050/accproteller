@@ -13,7 +13,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.accpro.teller.data.ApiRepository
 import com.accpro.teller.data.LocalStore
+import com.accpro.teller.ui.components.SafeCircularProgressIndicator
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,13 +33,41 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var companyName by remember { mutableStateOf<String?>(null) }
+    var teamList by remember { mutableStateOf<List<com.accpro.teller.data.TeamMember>>(emptyList()) }
+    var expanded by remember { mutableStateOf(false) }
 
-    // Load company name
+    // Load company name and team list
     LaunchedEffect(Unit) {
         try {
             companyName = localStore.getCompanyName()
+            val teamJson = localStore.getTeamList()
+            if (!teamJson.isNullOrBlank()) {
+                val type = object : com.google.gson.reflect.TypeToken<List<com.accpro.teller.data.TeamMember>>() {}.type
+                teamList = com.google.gson.Gson().fromJson(teamJson, type)
+            }
+            
+            // If the team list is empty, fetch it silently using the saved API key!
+            if (teamList.isEmpty()) {
+                val apiKey = localStore.getApiKey()
+                if (!apiKey.isNullOrBlank()) {
+                    when (val result = repository.validateKey(apiKey)) {
+                        is com.accpro.teller.data.ApiResult.Success -> {
+                            if (result.data.success) {
+                                val fetchedTeam = result.data.team ?: emptyList()
+                                teamList = fetchedTeam
+                                companyName = result.data.companyName ?: companyName
+                                localStore.saveTeamList(com.google.gson.Gson().toJson(fetchedTeam))
+                                if (result.data.companyName != null) {
+                                    localStore.saveCompanyName(result.data.companyName)
+                                }
+                            }
+                        }
+                        else -> { /* Ignore error, user can still type manually */ }
+                    }
+                }
+            }
         } catch (e: Exception) {
-            android.util.Log.e("AccProTeller", "Failed to load company name", e)
+            android.util.Log.e("AccProTeller", "Failed to load cached data or fetch team", e)
         }
     }
 
@@ -76,21 +109,92 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
             Spacer(Modifier.height(8.dp))
             Text(
-                "Only team members (cashiers/bankers) can log in here.",
+                "✅ API Connected — You can login",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Bold
             )
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
-            OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
-                label = { Text("Username") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+            if (teamList.isNotEmpty()) {
+                Text(
+                    "Quick Select User:",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(teamList) { member ->
+                        val memberName = member.name ?: "Unknown"
+                        val isSelected = username.equals(memberName, ignoreCase = true)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { username = memberName },
+                            label = { Text(memberName, fontSize = 12.sp) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it }
+            ) {
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { 
+                        username = it
+                        expanded = true 
+                    },
+                    label = { Text("Username") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    singleLine = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                )
+
+                val filteredMembers = teamList.filter { 
+                    val name = it.name ?: ""
+                    name.contains(username, ignoreCase = true)
+                }
+
+                if (filteredMembers.isNotEmpty() || teamList.isNotEmpty()) {
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        val displayList = if (username.isBlank()) teamList else filteredMembers
+                        displayList.forEach { member ->
+                            val memberName = member.name ?: ""
+                            val roleLabel = member.role?.takeIf { it.isNotBlank() } ?: "member"
+                            DropdownMenuItem(
+                                text = { Text("$memberName ($roleLabel)") },
+                                onClick = {
+                                    username = memberName
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(Modifier.height(16.dp))
 
@@ -139,7 +243,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                     .fillMaxWidth()
                     .height(50.dp)
             ) {
-                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                if (loading) SafeCircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
                 else Text("Login", fontWeight = FontWeight.Bold)
             }
 

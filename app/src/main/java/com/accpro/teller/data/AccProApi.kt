@@ -17,6 +17,9 @@ interface AccProApi {
     suspend fun login(@Body request: LoginRequest): LoginResponse
 
     @POST("/")
+    suspend fun registerDevice(@Body request: RegisterDeviceRequest): RegisterDeviceResponse
+
+    @POST("/")
     suspend fun createVoucher(
         @Header("Authorization") token: String,
         @Body request: VoucherRequest

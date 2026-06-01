@@ -82,3 +82,18 @@ data class ValidateKeyResponse(
     val teamCount: Int? = 0,
     val message: String? = null
 )
+
+data class RegisterDeviceRequest(
+    val action: String = "register_device",
+    val apiKey: String,
+    val deviceName: String,
+    val deviceInfo: String
+)
+
+data class RegisterDeviceResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+    val deviceName: String? = null,
+    val deviceInfo: String? = null,
+    val companyId: String? = null
+)

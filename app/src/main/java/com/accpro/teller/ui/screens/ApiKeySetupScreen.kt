@@ -1,6 +1,7 @@
 package com.accpro.teller.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +19,7 @@ import com.accpro.teller.data.LocalStore
 import com.accpro.teller.data.ApiRepository
 import com.accpro.teller.data.ApiResult
 import com.accpro.teller.data.TeamMember
+import com.accpro.teller.ui.components.SafeCircularProgressIndicator
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +39,11 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
     var validated by remember { mutableStateOf(false) }
     var companyName by remember { mutableStateOf<String?>(null) }
     var teamList by remember { mutableStateOf<List<TeamMember>>(emptyList()) }
+
+    val connectedAtState by localStore.apiConnectedAtFlow.collectAsState(initial = null)
+    val dataSentState by localStore.apiDataSentFlow.collectAsState(initial = 0L)
+    val dataReceivedState by localStore.apiDataReceivedFlow.collectAsState(initial = 0L)
+    var showUsageDetails by remember { mutableStateOf(false) }
 
     // Check if already configured
     LaunchedEffect(Unit) {
@@ -171,6 +178,17 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
                             val url = baseUrl.trim().trimEnd('/')
                             localStore.saveBaseUrl(url)
                             localStore.saveApiKey(apiKey.trim())
+                            // Save company name if it was validated or set
+                            val nameToSave = companyName ?: (if (validated) "AccountsPro" else null)
+                            if (nameToSave != null) {
+                                localStore.saveCompanyName(nameToSave)
+                            }
+                            if (teamList.isNotEmpty()) {
+                                val teamJson = com.google.gson.Gson().toJson(teamList)
+                                localStore.saveTeamList(teamJson)
+                            }
+                            // Register device connection with the backend
+                            repository.registerDevice()
                             onApiKeySaved()
                         } catch (e: Exception) {
                             errorMsg = "Error: ${e.message}"
@@ -184,7 +202,7 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
                     .fillMaxWidth()
                     .height(50.dp)
             ) {
-                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                if (loading) SafeCircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
                 else Text("Save & Continue", fontWeight = FontWeight.Bold)
             }
 
@@ -210,8 +228,14 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
                                 if (result.data.success) {
                                     companyName = result.data.companyName ?: "AccountsPro"
                                     teamList = result.data.team ?: emptyList()
+                                    // Save company name and team list to LocalStore so it's available on login screen
+                                    localStore.saveCompanyName(result.data.companyName ?: "AccountsPro")
+                                    val teamJson = com.google.gson.Gson().toJson(result.data.team ?: emptyList<TeamMember>())
+                                    localStore.saveTeamList(teamJson)
                                     validated = true
                                     errorMsg = null
+                                    // Register device to tell main app this device is connected
+                                    repository.registerDevice()
                                 } else {
                                     errorMsg = result.data.message ?: "Invalid API key"
                                 }
@@ -231,17 +255,101 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
                 Text(if (testing) "Testing..." else if (validated) "✓ Verified - Test Again" else "Test Connection", fontSize = 12.sp)
             }
 
-            Spacer(Modifier.height(8.dp))
-
-            TextButton(onClick = {
-                scope.launch {
-                    localStore.clearSession()
-                    localStore.saveApiKey("")
-                    localStore.saveBaseUrl("")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = { showUsageDetails = true }) {
+                    Text("API Usage Details", fontSize = 12.sp)
                 }
-            }) {
-                Text("Reset All Data", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+
+                TextButton(onClick = {
+                    scope.launch {
+                        localStore.clearSession()
+                        localStore.saveApiKey("")
+                        localStore.saveBaseUrl("")
+                        localStore.saveApiConnectedAt("")
+                        localStore.incrementApiDataSent(-localStore.getApiDataSent())
+                        localStore.incrementApiDataReceived(-localStore.getApiDataReceived())
+                    }
+                }) {
+                    Text("Reset All Data", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            }
+
+            if (showUsageDetails) {
+                val deviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+                val statusText = if (connectedAtState != null) "Connected to Device" else "Not Connected Yet"
+                val statusColor = if (connectedAtState != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+
+                AlertDialog(
+                    onDismissRequest = { showUsageDetails = false },
+                    title = { 
+                        Text(
+                            "API Usage Details", 
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        ) 
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Status:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(statusText, color = statusColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Device Model:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(deviceName, fontSize = 14.sp)
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("First Connected:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(connectedAtState ?: "Never", fontSize = 14.sp)
+                            }
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Data Sent:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(formatBytes(dataSentState), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Data Received:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(formatBytes(dataReceivedState), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showUsageDetails = false }) {
+                            Text("Close", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
             }
         }
     }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
+    val pre = "KMGTPE"[exp - 1] + ""
+    return String.format(java.util.Locale.US, "%.2f %sB", bytes / Math.pow(1024.0, exp.toDouble()), pre)
 }
