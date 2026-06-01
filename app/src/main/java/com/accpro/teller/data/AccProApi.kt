@@ -11,6 +11,9 @@ interface AccProApi {
     // All teller endpoints go through one cloud function
 
     @POST("")
+    suspend fun validateKey(@Body request: ValidateKeyRequest): ValidateKeyResponse
+
+    @POST("")
     suspend fun login(@Body request: LoginRequest): LoginResponse
 
     @POST("")

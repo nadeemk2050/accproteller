@@ -61,3 +61,24 @@ data class AccountItem(
     val name: String,
     val type: String?     // "cash", "bank", etc.
 )
+
+data class ValidateKeyRequest(
+    val action: String = "validate_key",
+    val apiKey: String
+)
+
+data class TeamMember(
+    val id: String,
+    val name: String,
+    val email: String,
+    val role: String
+)
+
+data class ValidateKeyResponse(
+    val success: Boolean,
+    val companyName: String?,
+    val companyId: String?,
+    val team: List<TeamMember>?,
+    val teamCount: Int?,
+    val message: String?
+)

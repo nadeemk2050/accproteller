@@ -16,6 +16,18 @@ class ApiRepository(private val localStore: LocalStore) {
         return AccProApi.create(baseUrl)
     }
 
+    suspend fun validateKey(apiKey: String): ApiResult<ValidateKeyResponse> =
+        withContext(Dispatchers.IO) {
+            try {
+                val api = getApi() ?: return@withContext ApiResult.Error("API not configured.")
+                val response = api.validateKey(ValidateKeyRequest(apiKey = apiKey))
+                ApiResult.Success(response)
+            } catch (e: Exception) {
+                android.util.Log.e("AccProTeller", "Validate key failed", e)
+                ApiResult.Error(e.message ?: "Failed to validate API key")
+            }
+        }
+
     suspend fun login(username: String, password: String): ApiResult<LoginResponse> =
         withContext(Dispatchers.IO) {
             try {

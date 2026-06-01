@@ -15,6 +15,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.accpro.teller.data.LocalStore
+import com.accpro.teller.data.ApiRepository
+import com.accpro.teller.data.ApiResult
+import com.accpro.teller.data.TeamMember
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -22,6 +25,7 @@ import kotlinx.coroutines.launch
 fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
     val context = LocalContext.current
     val localStore = remember { LocalStore(context) }
+    val repository = remember { ApiRepository(localStore) }
     val scope = rememberCoroutineScope()
 
     var apiKey by remember { mutableStateOf("") }
@@ -29,6 +33,9 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
     var showApiKey by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
+    var validated by remember { mutableStateOf(false) }
+    var companyName by remember { mutableStateOf<String?>(null) }
+    var teamList by remember { mutableStateOf<List<TeamMember>>(emptyList()) }
 
     // Check if already configured
     LaunchedEffect(Unit) {
@@ -61,7 +68,7 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
             Text(
                 "API Configuration",
@@ -72,17 +79,17 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
             Spacer(Modifier.height(8.dp))
 
             Text(
-                "Enter the API key issued from AccPro and the server URL.",
+                "Enter your AccPro server URL and API key to connect.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
             OutlinedTextField(
                 value = baseUrl,
-                onValueChange = { baseUrl = it },
+                onValueChange = { baseUrl = it; validated = false },
                 label = { Text("Server URL") },
                 placeholder = { Text("https://cashshams.web.app") },
                 modifier = Modifier.fillMaxWidth(),
@@ -90,11 +97,11 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = apiKey,
-                onValueChange = { apiKey = it },
+                onValueChange = { apiKey = it; validated = false },
                 label = { Text("API Key") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -111,36 +118,114 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
                 Text(errorMsg!!, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             }
 
-            Spacer(Modifier.height(24.dp))
+            // Validation success info
+            if (validated && companyName != null) {
+                Spacer(Modifier.height(12.dp))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "✅ Connected to $companyName",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${teamList.size} team member(s) found:",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        teamList.forEach { member ->
+                            Text(
+                                "  • ${member.name} (${member.role})",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+            }
 
-            Button(
+            Spacer(Modifier.height(16.dp))
+
+            // Test Connection button
+            OutlinedButton(
                 onClick = {
                     if (apiKey.isBlank() || baseUrl.isBlank()) {
                         errorMsg = "Please fill in both fields"
-                        return@Button
+                        return@OutlinedButton
                     }
                     loading = true
                     errorMsg = null
+                    validated = false
                     scope.launch {
                         try {
-                            localStore.saveApiKey(apiKey.trim())
+                            // Save temporarily for API call
                             val url = baseUrl.trim().trimEnd('/')
                             localStore.saveBaseUrl(url)
-                            onApiKeySaved()
+                            localStore.saveApiKey(apiKey.trim())
+
+                            when (val result = repository.validateKey(apiKey.trim())) {
+                                is ApiResult.Success -> {
+                                    if (result.data.success) {
+                                        companyName = result.data.companyName
+                                        teamList = result.data.team ?: emptyList()
+                                        validated = true
+                                        errorMsg = null
+                                    } else {
+                                        errorMsg = result.data.message ?: "Invalid API key"
+                                        validated = false
+                                    }
+                                }
+                                is ApiResult.Error -> {
+                                    errorMsg = "Connection failed: ${result.message}"
+                                    validated = false
+                                }
+                            }
                         } catch (e: Exception) {
-                            errorMsg = "Failed to save: ${e.message}"
+                            errorMsg = "Error: ${e.message}"
+                            validated = false
                         } finally {
                             loading = false
                         }
                     }
                 },
                 enabled = !loading,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = if (validated) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (loading) "Checking..." else if (validated) "✓ Verified" else "Test Connection", fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        try {
+                            onApiKeySaved()
+                        } catch (e: Exception) {
+                            errorMsg = "Failed to save: ${e.message}"
+                        }
+                    }
+                },
+                enabled = validated && !loading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
             ) {
-                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-                else Text("Save & Continue", fontWeight = FontWeight.Bold)
+                Text("Continue to Login", fontWeight = FontWeight.Bold)
             }
         }
     }
