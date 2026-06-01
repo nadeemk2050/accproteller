@@ -21,7 +21,7 @@ class ApiRepository(private val localStore: LocalStore) {
             try {
                 val api = getApi() ?: return@withContext ApiResult.Error("API not configured. Set API key first.")
                 val apiKey = localStore.getApiKey() ?: return@withContext ApiResult.Error("API key not found.")
-                val response = api.login(LoginRequest(apiKey, username, password))
+                val response = api.login(LoginRequest(apiKey = apiKey, username = username, password = password))
                 if (response.success && response.token != null) {
                     localStore.saveAuthToken(response.token)
                     localStore.saveTeamUserId(response.userId ?: "")

@@ -32,10 +32,14 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
 
     // Check if already configured
     LaunchedEffect(Unit) {
-        val existingKey = localStore.getApiKey()
-        val existingUrl = localStore.getBaseUrl()
-        if (!existingKey.isNullOrBlank() && !existingUrl.isNullOrBlank()) {
-            onApiKeySaved()
+        try {
+            val existingKey = localStore.getApiKey()
+            val existingUrl = localStore.getBaseUrl()
+            if (!existingKey.isNullOrBlank() && !existingUrl.isNullOrBlank()) {
+                onApiKeySaved()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AccProTeller", "API key check failed", e)
         }
     }
 

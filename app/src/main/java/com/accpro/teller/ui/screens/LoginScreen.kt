@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.accpro.teller.data.ApiRepository
 import com.accpro.teller.data.LocalStore
 import kotlinx.coroutines.launch
@@ -30,7 +31,11 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
     // Load company name
     LaunchedEffect(Unit) {
-        companyName = localStore.getCompanyName()
+        try {
+            companyName = localStore.getCompanyName()
+        } catch (e: Exception) {
+            android.util.Log.e("AccProTeller", "Failed to load company name", e)
+        }
     }
 
     Scaffold(

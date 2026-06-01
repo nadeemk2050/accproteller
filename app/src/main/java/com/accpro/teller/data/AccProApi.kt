@@ -46,9 +46,9 @@ interface AccProApi {
 
             // Build the full URL to the teller cloud function
             val tellerUrl = baseUrl.trimEnd('/').let {
-                // If it's a Firebase Hosting URL, use the hosting proxy path
+                // If it's a Firebase Hosting URL, the teller function has its own dedicated endpoint
                 if (it.contains("web.app") || it.contains("firebase")) {
-                    "$it/tellerApi"
+                    "https://tellerapi-rl2gmlmsma-uc.a.run.app"
                 } else {
                     "$it/tellerApi" // Cloud Function path
                 }
