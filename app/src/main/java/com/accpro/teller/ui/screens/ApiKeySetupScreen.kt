@@ -33,6 +33,7 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
     var showApiKey by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
+    var testing by remember { mutableStateOf(false) }
     var validated by remember { mutableStateOf(false) }
     var companyName by remember { mutableStateOf<String?>(null) }
     var teamList by remember { mutableStateOf<List<TeamMember>>(emptyList()) }
@@ -129,23 +130,27 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            "✅ Connected to $companyName",
+                            "✅ Connected — $companyName",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "${teamList.size} team member(s) found:",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        teamList.forEach { member ->
+                        if (teamList.isNotEmpty()) {
+                            Spacer(Modifier.height(4.dp))
                             Text(
-                                "  • ${member.name} (${member.role})",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                "${teamList.size} team member(s) found:",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
+                            teamList.forEach { member ->
+                                val memberName = member.name?.takeIf { it.isNotBlank() } ?: "Unknown"
+                                val memberRole = member.role?.takeIf { it.isNotBlank() } ?: "member"
+                                Text(
+                                    "  • $memberName ($memberRole)",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
                         }
                     }
                 }
@@ -153,79 +158,89 @@ fun ApiKeySetupScreen(onApiKeySaved: () -> Unit) {
 
             Spacer(Modifier.height(16.dp))
 
-            // Test Connection button
-            OutlinedButton(
+            Button(
                 onClick = {
                     if (apiKey.isBlank() || baseUrl.isBlank()) {
                         errorMsg = "Please fill in both fields"
-                        return@OutlinedButton
+                        return@Button
                     }
                     loading = true
                     errorMsg = null
-                    validated = false
                     scope.launch {
                         try {
-                            // Save temporarily for API call
                             val url = baseUrl.trim().trimEnd('/')
                             localStore.saveBaseUrl(url)
                             localStore.saveApiKey(apiKey.trim())
-
-                            when (val result = repository.validateKey(apiKey.trim())) {
-                                is ApiResult.Success -> {
-                                    if (result.data.success) {
-                                        companyName = result.data.companyName
-                                        teamList = result.data.team ?: emptyList()
-                                        validated = true
-                                        errorMsg = null
-                                    } else {
-                                        errorMsg = result.data.message ?: "Invalid API key"
-                                        validated = false
-                                    }
-                                }
-                                is ApiResult.Error -> {
-                                    errorMsg = "Connection failed: ${result.message}"
-                                    validated = false
-                                }
-                            }
+                            onApiKeySaved()
                         } catch (e: Exception) {
                             errorMsg = "Error: ${e.message}"
-                            validated = false
                         } finally {
                             loading = false
                         }
                     }
                 },
                 enabled = !loading,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = if (validated) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                )
-            ) {
-                if (loading) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(if (loading) "Checking..." else if (validated) "✓ Verified" else "Test Connection", fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Button(
-                onClick = {
-                    scope.launch {
-                        try {
-                            onApiKeySaved()
-                        } catch (e: Exception) {
-                            errorMsg = "Failed to save: ${e.message}"
-                        }
-                    }
-                },
-                enabled = validated && !loading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
             ) {
-                Text("Continue to Login", fontWeight = FontWeight.Bold)
+                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                else Text("Save & Continue", fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            TextButton(onClick = {
+                if (loading || testing) return@TextButton
+                if (apiKey.isBlank() || baseUrl.isBlank()) {
+                    errorMsg = "Please fill in both fields"
+                    return@TextButton
+                }
+                testing = true
+                errorMsg = null
+                validated = false
+                scope.launch {
+                    try {
+                        val url = baseUrl.trim().trimEnd('/')
+                        localStore.saveBaseUrl(url)
+                        localStore.saveApiKey(apiKey.trim())
+
+                        when (val result = repository.validateKey(apiKey.trim())) {
+                            is ApiResult.Success -> {
+                                if (result.data.success) {
+                                    companyName = result.data.companyName ?: "AccountsPro"
+                                    teamList = result.data.team ?: emptyList()
+                                    validated = true
+                                    errorMsg = null
+                                } else {
+                                    errorMsg = result.data.message ?: "Invalid API key"
+                                }
+                            }
+                            is ApiResult.Error -> {
+                                errorMsg = "Connection failed: ${result.message}"
+                            }
+                        }
+                    } catch (e: Throwable) {
+                        android.util.Log.e("AccProTeller", "Test connection crash prevented", e)
+                        errorMsg = "Error: ${e.message}"
+                    } finally {
+                        testing = false
+                    }
+                }
+            }) {
+                Text(if (testing) "Testing..." else if (validated) "✓ Verified - Test Again" else "Test Connection", fontSize = 12.sp)
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            TextButton(onClick = {
+                scope.launch {
+                    localStore.clearSession()
+                    localStore.saveApiKey("")
+                    localStore.saveBaseUrl("")
+                }
+            }) {
+                Text("Reset All Data", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         }
     }

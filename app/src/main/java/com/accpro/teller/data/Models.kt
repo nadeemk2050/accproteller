@@ -68,17 +68,17 @@ data class ValidateKeyRequest(
 )
 
 data class TeamMember(
-    val id: String,
-    val name: String,
-    val email: String,
-    val role: String
+    val id: String? = null,
+    val name: String? = null,
+    val email: String? = null,
+    val role: String? = null
 )
 
 data class ValidateKeyResponse(
-    val success: Boolean,
-    val companyName: String?,
-    val companyId: String?,
-    val team: List<TeamMember>?,
-    val teamCount: Int?,
-    val message: String?
+    val success: Boolean = false,
+    val companyName: String? = null,
+    val companyId: String? = null,
+    val team: List<TeamMember>? = emptyList(),
+    val teamCount: Int? = 0,
+    val message: String? = null
 )

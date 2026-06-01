@@ -10,25 +10,25 @@ import java.util.concurrent.TimeUnit
 interface AccProApi {
     // All teller endpoints go through one cloud function
 
-    @POST("")
+    @POST("/")
     suspend fun validateKey(@Body request: ValidateKeyRequest): ValidateKeyResponse
 
-    @POST("")
+    @POST("/")
     suspend fun login(@Body request: LoginRequest): LoginResponse
 
-    @POST("")
+    @POST("/")
     suspend fun createVoucher(
         @Header("Authorization") token: String,
         @Body request: VoucherRequest
     ): VoucherResponse
 
-    @GET("")
+    @GET("/")
     suspend fun getBalances(
         @Header("Authorization") token: String,
         @Query("action") action: String = "balances"
     ): BalanceResponse
 
-    @GET("")
+    @GET("/")
     suspend fun getAccounts(
         @Header("Authorization") token: String,
         @Query("action") action: String = "accounts"

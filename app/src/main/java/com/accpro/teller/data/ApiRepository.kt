@@ -21,7 +21,25 @@ class ApiRepository(private val localStore: LocalStore) {
             try {
                 val api = getApi() ?: return@withContext ApiResult.Error("API not configured.")
                 val response = api.validateKey(ValidateKeyRequest(apiKey = apiKey))
-                ApiResult.Success(response)
+
+                // Normalize nullable payload values so UI rendering remains crash-safe.
+                val safeTeam = (response.team ?: emptyList()).map { member ->
+                    TeamMember(
+                        id = member.id ?: "",
+                        name = member.name ?: "Unknown",
+                        email = member.email ?: "",
+                        role = member.role ?: "member"
+                    )
+                }
+
+                val safeResponse = response.copy(
+                    companyName = response.companyName ?: "AccountsPro",
+                    team = safeTeam,
+                    teamCount = response.teamCount ?: safeTeam.size,
+                    message = response.message ?: if (response.success) "Connection successful" else "Validation failed"
+                )
+
+                ApiResult.Success(safeResponse)
             } catch (e: Exception) {
                 android.util.Log.e("AccProTeller", "Validate key failed", e)
                 ApiResult.Error(e.message ?: "Failed to validate API key")
